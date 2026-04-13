@@ -1,11 +1,19 @@
 name: Update
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       tmate:
-        description: 'Start a tmate session'
-        default: 'false'
+        description: Start a tmate session
+        type: boolean
+        default: false
+        required: false
+      nuke:
+        description: Rebuild full commit history
+        type: boolean
+        default: false
         required: false
   schedule:
     - cron: '11 8 * * *' # daily
@@ -33,7 +41,7 @@ jobs:
         uses: mxschmitt/action-tmate@v3
         with:
           detached: true
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.tmate == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.tmate }}
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -51,32 +59,53 @@ jobs:
           key: ${{ steps.checkout-sdk.outputs.commit }}
 
       - name: Restore cookies
-        run: echo "$COOKIES" > cookies.json
+        id: restore-cookies
+        run: |
+          python <<'PYTHON'
+          from hashlib import sha256
+          from os import environ
+          data = environ['COOKIES'].encode('utf-8')
+          print(f'Size: {len(data)}, SHA256: {sha256(data).hexdigest()}')
+          with open('cookies.json', 'wb') as f: f.write(data)
+          PYTHON
         env:
           COOKIES: ${{ secrets.COOKIES }}
 
       - name: Update
         id: update
-        run: ./generate.py sdk --git-commit-arg=--author="Valve <questions@valvesoftware.com>" --log-level debug
+        run: |
+          ./generate.py sdk --log-level debug \
+            --git-commit-arg=--author="Valve <questions@valvesoftware.com>" \
+            ${{ case(github.event_name == 'workflow_dispatch' && inputs.nuke, '--nuke', '') }}
         env:
-          COOKIES: ${{ secrets.COOKIES }}
           STEAM_LOGIN: ${{ secrets.STEAM_LOGIN }}
           STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
           STEAM_SHARED_SECRET: ${{ secrets.STEAM_SHARED_SECRET }}
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_DATE: "2085-11-08T00:00:00+00:00"
 
       - name: Save download cache
+        if: ${{ steps.update.outputs.commit != steps.checkout-sdk.outputs.commit }}
         uses: actions/cache/save@v5
         with:
           path: download
           key: ${{ steps.update.outputs.commit }}
 
       - name: Save cookies
-        run: gh secret set COOKIES < cookies.json
+        if: ${{ !cancelled() && steps.restore-cookies.conclusion == 'success' }}
+        run: |
+          python <<'PYTHON'
+          from hashlib import sha256
+          with open('cookies.json', 'rb') as f: data = f.read()
+          print(f'Size: {len(data)}, SHA256: {sha256(data).hexdigest()}')
+          PYTHON
+          gh secret set COOKIES < cookies.json
         env:
           GH_TOKEN: ${{ secrets.SECRET_GITHUB_TOKEN }}
+
+      - name: Define remote
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.nuke }}
+        run: git -C sdk remote add origin ${{ github.repositoryUrl }}
 
       - name: Push
         if: ${{ steps.update.outputs.has-new == '1' && steps.update.outputs.reset != '1' }}
@@ -89,7 +118,7 @@ jobs:
           git -C sdk push --force --progress --verbose --set-upstream origin sdk
 
       - name: Push tags
-        if: ${{ steps.update.outputs.has-new == '1' || steps.update.outputs.reset }}
+        if: ${{ steps.update.outputs.has-new == '1' || steps.update.outputs.reset == '1' }}
         run: |
           for tag in $(git -C sdk ls-remote --tags origin | sed -E 's|.+refs/tags/||'); do
             if ! git -C sdk merge-base --is-ancestor "refs/tags/$tag" sdk; then
@@ -100,12 +129,15 @@ jobs:
           done
           git -C sdk push --verbose --force --tags
 
-      - name: Notify about force push
+      - name: Notify about changes
+        if: ${{ steps.update.outputs.has-new == '1' || steps.update.outputs.reset == '1' }}
         uses: dawidd6/action-send-mail@v16
-        if: ${{ steps.update.outputs.reset == '1' }}
         with:
           connection_url: ${{ secrets.MAIL_CONNECTION }}
-          subject: "[${{ github.repository }}] Branch sdk was force-pushed to ${{ steps.update.outputs.commit-short }}"
+          subject: >
+            [${{ github.repository }}]
+            ${{ case(steps.update.outputs.reset == '1', 'Branch sdk was force-pushed to', steps.update.outpus.new-commit-count) }}
+            ${{ case(steps.update.outputs.reset == '1', steps.update.outputs.commit-short, 'new commit') }}
           from: ${{ secrets.MAIL_FROM }}
           to: ${{ secrets.MAIL_TO }}
           bcc: ${{ secrets.MAIL_BCC }}

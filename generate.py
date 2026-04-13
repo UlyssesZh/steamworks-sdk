@@ -79,7 +79,7 @@ Use the following options to prevent Git global config from affecting commit has
 	parser.add_argument('--git-tag-arg', default=[], action='append', help='additional command line arguments for `git tag`; may specify multiple times')
 	parser.add_argument('--git-exe', default='git', help='path to git command executable')
 	parser.add_argument('--git-branch', default='sdk', help='the git branch to work on')
-	parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error', 'critical'], help='log level')
+	parser.add_argument('--log-level', default='info', choices=['debug', 'info', 'warning', 'error', 'critical'], help='log level')
 	args = parser.parse_args()
 
 	logging.basicConfig(stream=sys.stderr, level=getattr(logging, args.log_level.upper()))
@@ -121,6 +121,14 @@ Use the following options to prevent Git global config from affecting commit has
 
 	old_commits = None
 	async def clean_up():
+		if cookies_path:
+			logger.info('Writing cookies')
+			try:
+				with cookies_path.open('w') as f:
+					json.dump(cookie_storage.cookies, f)
+			except Exception:
+				logger.warning('Failed to write cookies')
+				logger.warning(traceback.format_exc())
 		try:
 			await steam.close()
 		except Exception:
@@ -153,9 +161,9 @@ Use the following options to prevent Git global config from affecting commit has
 		result = subprocess.run(git_args, env=env, capture_output=True)
 		if result.stderr:
 			if check:
-				logger.warning(f'Git command {repr(git_args)} printed to stderr: {result.stderr.decode('utf-8')}')
+				logger.warning(f'Git command {repr(git_args)} printed to stderr: {result.stderr.decode('utf-8').strip()}')
 			else:
-				logger.debug(result.stderr.decode('utf-8'))
+				logger.debug(result.stderr.decode('utf-8').strip())
 		if result.returncode and check:
 			raise Exception(f'Git command {repr(git_args)} returned nonzero code {result.returncode}')
 		return result.stdout.decode('utf-8') if check else not result.returncode
@@ -166,14 +174,15 @@ Use the following options to prevent Git global config from affecting commit has
 		if cookies_path.exists():
 			if cookies_path.is_dir():
 				logger.error(f'Cookies path {args.cookies} is a dir instead of a file')
-				await clean_up()
-				sys.exit(1)
-			logger.debug('Reading existing cookies')
-			with cookies_path.open() as f:
-				cookie_storage.cookies = json.load(f)
+				cookies_path = None
+			else:
+				logger.info('Reading existing cookies')
+				with cookies_path.open() as f:
+					cookie_storage.cookies = json.load(f)
 	except Exception:
 		logger.warning('Failed to read cookies')
 		logger.warning(traceback.format_exc())
+		cookies_path = None
 
 	steam = Steam(
 		login=login,
@@ -181,7 +190,7 @@ Use the following options to prevent Git global config from affecting commit has
 		shared_secret=shared_secret,
 		cookie_storage=cookie_storage
 	)
-	logger.debug('Logging in')
+	logger.info('Logging in')
 	try:
 		await steam.login_to_steamworks()
 	except Exception:
@@ -189,14 +198,6 @@ Use the following options to prevent Git global config from affecting commit has
 		logger.error(traceback.format_exc())
 		await clean_up()
 		sys.exit(1)
-
-	logger.debug('Writing cookies')
-	try:
-		with cookies_path.open('w') as f:
-			json.dump(cookie_storage.cookies, f)
-	except Exception:
-		logger.warning('Failed to write cookies')
-		logger.warning(traceback.format_exc())
 
 	try:
 		downloads_list_response = await steam.request_raw(url='https://partner.steamgames.com/downloads/list')
@@ -312,6 +313,7 @@ Use the following options to prevent Git global config from affecting commit has
 		sys.exit(1)
 
 	commit_env = os.environ.copy()
+	new_commit_count = 0
 	for item in downloads_list[index:]:
 		if not item.message:
 			logger.debug(f'Skipping v{item.version} because it is redacted')
@@ -385,10 +387,11 @@ Use the following options to prevent Git global config from affecting commit has
 			env=commit_env,
 		)
 		git('tag', f'v{item.version}', '--force', *args.git_tag_arg)
-		output('has-new', '1')
-
-	commit_hash = git('rev-parse', 'HEAD').strip()
-	logger.info(f'Final commit is {commit_hash}')
+		new_commit_count += 1
+		commit_hash = git('rev-parse', 'HEAD').strip()
+		logger.info(f'Commit v{item.version} finished ({commit_hash})')
+	output('new-commit-count', str(new_commit_count))
+	output('has-new', '1' if new_commit_count else '0')
 	output('commit', commit_hash)
 	output('commit-short', commit_hash[:7])
 

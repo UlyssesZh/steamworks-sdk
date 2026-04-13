@@ -24,7 +24,9 @@ If you do not have Nix installed, you can use diffutils:
 ```shell
 unzip -q steamworks_sdk_164.zip
 git clone --branch v1.64 --depth 1 https://github.com/UlyssesZh/steamworks-sdk.git mirror
-diff -q -r -x .git sdk mirror
+if diff -q -r -x .git sdk mirror; then
+	echo "all files are identical"
+fi
 ```
 
 Open an issue if the files are not identical.
@@ -40,7 +42,7 @@ You can reproduce the full commit history of the `sdk` branch yourself by follow
    To get the Steam Guard shared secret, you may use tools like [steamguard-cli](https://github.com/dyc3/steamguard-cli).
 3. Optionally, set up a Python virtual environment by running `python -m venv venv && source venv/bin/activate`.
 4. Install dependencies: `pip install -r requirements.txt`.
-5. Generate everything: `./generate.py sdk --git-arg=--author="Valve <questions@valvesoftware.com>"`
+5. Generate everything: `./generate.py sdk --git-commit-arg=--author="Valve <questions@valvesoftware.com>"`
 6. Check the commit hashes:
 
 ```shell
@@ -60,6 +62,19 @@ If you cannot reproduce the commit hash, check the following:
 - If you have hooks configured in Git global config, add the options `--git-commit-arg=--no-post-rewrite --git-commit-arg=--no-verify`.
 
 Open an issue if the commit hash really cannot be reproduced.
+
+## Subscribe to updates
+
+You can subscribe to updates using this mirror in two ways:
+
+- Atom feeds: GitHub provides Atom feeds for [tags](https://github.com/UlyssesZh/steamworks-sdk/tags.atom)
+  and [commits](https://github.com/UlyssesZh/steamworks-sdk/commits/sdk.atom).
+- Email: There is a repository secret called `MAIL_BCC`.
+  Contact me by any means (e.g. [email](mailto:ulysseszhan@gmail.com)) to be added to that list.
+
+Notice that Steam officially provides an [RSS feed](https://store.steampowered.com/feeds/news/group/4145017)
+for Steamworks development news.
+It may be more useful for most people in that it has more information than Steamworks SDK version updates.
 
 ## License
 
