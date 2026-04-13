@@ -1,0 +1,2 @@
+beautifulsoup4
+pysteamauth2 @ git+https://github.com/UlyssesZh/pysteamauth.git@steamworks
