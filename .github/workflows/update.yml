@@ -26,11 +26,11 @@ jobs:
       actions: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout sdk branch
         id: checkout-sdk
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: sdk
           path: sdk
