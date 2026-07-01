@@ -53,7 +53,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Restore download cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: download
           key: ${{ steps.checkout-sdk.outputs.commit }}
@@ -86,7 +86,7 @@ jobs:
 
       - name: Save download cache
         if: ${{ steps.update.outputs.commit != steps.checkout-sdk.outputs.commit }}
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: download
           key: ${{ steps.update.outputs.commit }}
