@@ -131,7 +131,7 @@ jobs:
 
       - name: Notify about changes
         if: ${{ steps.update.outputs.has-new == '1' || steps.update.outputs.reset == '1' }}
-        uses: dawidd6/action-send-mail@v16
+        uses: dawidd6/action-send-mail@v18
         with:
           connection_url: ${{ secrets.MAIL_CONNECTION }}
           subject: >
