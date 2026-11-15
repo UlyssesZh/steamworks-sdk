@@ -46,7 +46,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
           cache: pip
 
       - name: Install dependencies
@@ -64,7 +64,7 @@ jobs:
           python <<'PYTHON'
           from hashlib import sha256
           from os import environ
-          data = environ['COOKIES'].encode('utf-8')
+          data = (environ['COOKIES'].strip() or '{}').encode('utf-8')
           print(f'Size: {len(data)}, SHA256: {sha256(data).hexdigest()}')
           with open('cookies.json', 'wb') as f: f.write(data)
           PYTHON
@@ -92,7 +92,7 @@ jobs:
           key: ${{ steps.update.outputs.commit }}
 
       - name: Save cookies
-        if: ${{ !cancelled() && steps.restore-cookies.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.update.outputs.cookies-saved == '1' }}
         run: |
           python <<'PYTHON'
           from hashlib import sha256

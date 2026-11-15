@@ -48,6 +48,18 @@ class Release:
 
 logger = logging.getLogger(__name__)
 
+def load_cookies(cookie_storage, cookies_path):
+	if not cookies_path.exists():
+		return
+	try:
+		data = cookies_path.read_text()
+		cookies = json.loads(data) if data.strip() else {}
+		if not isinstance(cookies, dict):
+			raise ValueError('Cookies must be a JSON object')
+		cookie_storage.cookies = cookies
+	except (OSError, ValueError):
+		logger.warning('Failed to read cookies; starting with a fresh session')
+
 async def main():
 
 	parser = argparse.ArgumentParser(
@@ -126,6 +138,8 @@ Use the following options to prevent Git global config from affecting commit has
 			try:
 				with cookies_path.open('w') as f:
 					json.dump(cookie_storage.cookies, f)
+				if authenticated and cookie_storage.cookies.get(login):
+					output('cookies-saved', '1')
 			except Exception:
 				logger.warning('Failed to write cookies')
 				logger.warning(traceback.format_exc())
@@ -170,19 +184,11 @@ Use the following options to prevent Git global config from affecting commit has
 
 	cookie_storage = BaseCookieStorage()
 	cookies_path = Path(args.cookies)
-	try:
-		if cookies_path.exists():
-			if cookies_path.is_dir():
-				logger.error(f'Cookies path {args.cookies} is a dir instead of a file')
-				cookies_path = None
-			else:
-				logger.info('Reading existing cookies')
-				with cookies_path.open() as f:
-					cookie_storage.cookies = json.load(f)
-	except Exception:
-		logger.warning('Failed to read cookies')
-		logger.warning(traceback.format_exc())
+	if cookies_path.is_dir():
+		logger.error(f'Cookies path {args.cookies} is a dir instead of a file')
 		cookies_path = None
+	else:
+		load_cookies(cookie_storage, cookies_path)
 
 	steam = Steam(
 		login=login,
@@ -190,9 +196,11 @@ Use the following options to prevent Git global config from affecting commit has
 		shared_secret=shared_secret,
 		cookie_storage=cookie_storage
 	)
+	authenticated = False
 	logger.info('Logging in')
 	try:
 		await steam.login_to_steamworks()
+		authenticated = True
 	except Exception:
 		logger.error('Failed to log in Steamworks')
 		logger.error(traceback.format_exc())
