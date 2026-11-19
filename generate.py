@@ -243,9 +243,11 @@ Use the following options to prevent Git global config from affecting commit has
 
 	repo = Path(args.repo)
 	try:
-		if repo.exists() and args.nuke:
-			logger.debug('Deleting existing repo')
-			shutil.rmtree(repo)
+		if args.nuke:
+			if repo.exists():
+				logger.debug('Deleting existing repo')
+				shutil.rmtree(repo)
+			output('reset', '1')
 		if not repo.joinpath('.git').is_dir():
 			logger.debug('Initializing git repo')
 			repo.mkdir(parents=True, exist_ok=True)

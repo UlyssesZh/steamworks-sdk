@@ -15,6 +15,11 @@ on:
         type: boolean
         default: false
         required: false
+      redownload:
+        description: Redownload from upstream
+        type: boolean
+        default: false
+        required: false
   schedule:
     - cron: '11 8 * * *' # daily
 
@@ -53,7 +58,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Restore download cache
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.nuke) }}
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.redownload }}
         uses: actions/cache/restore@v6
         with:
           path: download
@@ -106,17 +111,25 @@ jobs:
 
       - name: Define remote
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.nuke }}
-        run: git -C sdk remote add origin ${{ github.repositoryUrl }}
+        run: |
+          git -C sdk remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          gh auth setup-git
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Push
         if: ${{ steps.update.outputs.has-new == '1' && steps.update.outputs.reset != '1' }}
         run: |
           git -C sdk push --progress --verbose --set-upstream origin sdk
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Force push
         if: ${{ steps.update.outputs.reset == '1' }}
         run: |
           git -C sdk push --force --progress --verbose --set-upstream origin sdk
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Push tags
         if: ${{ steps.update.outputs.has-new == '1' || steps.update.outputs.reset == '1' }}
@@ -129,6 +142,8 @@ jobs:
             fi
           done
           git -C sdk push --verbose --force --tags
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Notify about changes
         if: ${{ steps.update.outputs.has-new == '1' || steps.update.outputs.reset == '1' }}
